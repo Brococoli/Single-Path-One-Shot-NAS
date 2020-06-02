@@ -70,6 +70,27 @@ SEARCH_SPACE={
     },
 }
 
+def archs_choice(search_args):
+  archs = search_args.copy()
+  for i, arg in enumerate(search_args):
+    archs[i] = archs[i]._replace(width_ratio=choice(arg.width_ratio),
+                  kernel_size=choice(arg.kernel_size),
+                  expand_ratio=choice(arg.expand_ratio))
+  return archs
+
+def archs_choice_with_constant(input_shape, search_args, blocks_args, flops_constant, params_constant):
+  while True:
+    arch = archs_choice(search_args)
+    flops, params = get_flops_params(input_shape, search_args=arch, blocks_args=blocks_args)
+    flops /= 1000000
+    params /= 1000000
+    if flops < flops_constant and params < params_constant:
+      break
+    #logging.info('Search a arch: %s' % str(arch))
+  return arch
+
+  
+
 def get_nas_model(type_name, load_path=None):
     model = SinglePathOneShot(dropout_rate=0.2,
                       drop_connect_rate=0.,
