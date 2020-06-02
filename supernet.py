@@ -36,6 +36,22 @@ BLOCK_ARGS_B = [ #4760/10000
                   expand_ratio=6, id_skip=True, strides=[1, 1], se_ratio=0.25)
         ]
 
+BLOCK_ARGS_C = [ #4760/10000
+        BlockArgs(kernel_size=3, num_repeat=1, channels=32,
+                  expand_ratio=1, id_skip=True, strides=[1, 1], se_ratio=0.25),
+        BlockArgs(kernel_size=3, num_repeat=2, channels=32,
+                  expand_ratio=6, id_skip=True, strides=[2, 2], se_ratio=0.25),
+        BlockArgs(kernel_size=3, num_repeat=3, channels=64,
+                  expand_ratio=6, id_skip=True, strides=[2, 2], se_ratio=0.25),
+        BlockArgs(kernel_size=3, num_repeat=4, channels=64,
+                  expand_ratio=6, id_skip=True, strides=[2, 2], se_ratio=0.25),
+        BlockArgs(kernel_size=3, num_repeat=3, channels=96,
+                  expand_ratio=6, id_skip=True, strides=[1, 1], se_ratio=0.25),
+        BlockArgs(kernel_size=3, num_repeat=3, channels=160,
+                  expand_ratio=6, id_skip=True, strides=[2, 2], se_ratio=0.25),
+        BlockArgs(kernel_size=3, num_repeat=1, channels=160,
+                  expand_ratio=6, id_skip=True, strides=[1, 1], se_ratio=0.25)
+        ]
 
 SEARCH_SPACE={
     'mobilenetv2':{
@@ -47,7 +63,7 @@ SEARCH_SPACE={
     'mobilenetv2-b0':{
     'blocks_args': DEFAULT_BLOCKS_ARGS,
     'search_args': [
-            SearchArgs(width_ratio=np.arange(0.2,2.1,0.2), kernel_size=[3,5,7], expand_ratio=range(2,6) if i else [1]) for i in range(sum(arg.num_repeat for arg in DEFAULT_BLOCKS_ARGS))
+            SearchArgs(width_ratio=np.arange(0.2,1.7,0.2), kernel_size=[3,5,7], expand_ratio=range(2,6) if i else [1]) for i in range(sum(arg.num_repeat for arg in DEFAULT_BLOCKS_ARGS))
         ]
     },
     'spos-b0':{
@@ -68,26 +84,14 @@ SEARCH_SPACE={
             SearchArgs(width_ratio=np.arange(0.2,2.1,0.2), kernel_size=[3,5,7], expand_ratio=range(2,6)) for i in range(sum(arg.num_repeat for arg in BLOCK_ARGS_B))
         ]
     },
+    'spos-b3':{
+    'blocks_args': BLOCK_ARGS_C,
+    'search_args': [
+            SearchArgs(width_ratio=np.arange(0.2,2.1,0.2), kernel_size=[3,5,7], expand_ratio=range(2,6)) for i in range(sum(arg.num_repeat for arg in BLOCK_ARGS_C))
+        ]
+    },
 }
 
-def archs_choice(search_args):
-  archs = search_args.copy()
-  for i, arg in enumerate(search_args):
-    archs[i] = archs[i]._replace(width_ratio=choice(arg.width_ratio),
-                  kernel_size=choice(arg.kernel_size),
-                  expand_ratio=choice(arg.expand_ratio))
-  return archs
-
-def archs_choice_with_constant(input_shape, search_args, blocks_args, flops_constant, params_constant):
-  while True:
-    arch = archs_choice(search_args)
-    flops, params = get_flops_params(input_shape, search_args=arch, blocks_args=blocks_args)
-    flops /= 1000000
-    params /= 1000000
-    if flops < flops_constant and params < params_constant:
-      break
-    #logging.info('Search a arch: %s' % str(arch))
-  return arch
 
   
 

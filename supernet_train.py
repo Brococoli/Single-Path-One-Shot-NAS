@@ -34,10 +34,10 @@ class Trainer(object):
         #warm up
         if epoch < 30: # dont search width_ratio
             for idx, arg in enumerate(search_args):
-                search_args[idx] = arg._replace(width_ratio=max(arg.width_ratio))
+                search_args[idx] = arg._replace(width_ratio=[max(arg.width_ratio)])
         elif epoch < 40:
             for idx, arg in enumerate(search_args):
-                search_args[idx] = arg._replace(width_ratio=max(arg.width_ratio[:-(epoch-50)])) 
+                search_args[idx] = arg._replace(width_ratio=arg.width_ratio[:-(epoch-28)]) 
 
         return search_args
         
@@ -69,6 +69,8 @@ class Trainer(object):
         train_num = self.data['train_num']
         val_ds = self.data['val_ds']
         val_num = self.data['val_num']
+        train_ds = train_ds.shuffle(1000).batch(batch_size).prefetch(100)
+        val_ds = val_ds.batch(batch_size).prefetch(100)
 
         epochs_probar = tf.keras.utils.Progbar(epochs)   
         for epoch in range(epochs):
@@ -76,12 +78,12 @@ class Trainer(object):
             val_probar = tf.keras.utils.Progbar(ceil(val_num/batch_size))     #
 
             self.lr_plan(epoch)
-            for idx, (images, labels) in enumerate(train_ds.batch(batch_size).prefetch(500)):
+            for idx, (images, labels) in enumerate(train_ds):
                 archs = self.get_archs(epoch) ############
                 loss, acc = self.train_step(images, labels, archs)
                 train_probar.update(idx+1, values=[['accuracy', acc], ['loss', loss]])
 
-            for idx, (images, labels) in enumerate(val_ds.batch(batch_size).prefetch(500)):
+            for idx, (images, labels) in enumerate(val_ds):
                 archs = self.get_archs(epoch) ##############
                 loss, acc = self.val_step(images, labels, archs)
                 val_probar.update(idx+1, values=[['val_accuracy', acc], ['val_loss', loss]])
@@ -100,7 +102,7 @@ def train():
 
     logging.info('beging train...')
 
-    model = get_nas_model('spos-b1')
+    model = get_nas_model('mobilenetv2-b0')
     logging.debug('get a nas model')
 
     data = get_webface()
@@ -115,7 +117,7 @@ def train():
 
 if __name__ == '__main__':
     import os,logging
-    os.environ['CUDA_VISIBLE_DEVICES'] = '0'
+    os.environ['CUDA_VISIBLE_DEVICES'] = '1'
     #tf.get_logger().setLevel(logging.ERROR)
     import tensorflow as tf
 

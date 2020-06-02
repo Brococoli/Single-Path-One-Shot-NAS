@@ -64,6 +64,7 @@ class SuperBatchNormalization(layers.Layer):
     def call(self, x, training=True, **kwargs):
         filters_in = x.shape[-1]
         assert filters_in <= self.max_filters_in
+        logging.debug('use bn')
 
         mean, var = tf.nn.moments(x, axes=self.axes, keepdims=False, name='moments')
 
@@ -71,6 +72,7 @@ class SuperBatchNormalization(layers.Layer):
         beta = tf.slice(self.beta, [0], [filters_in])
 
         if not self.inference_update_stat: 
+            logging.debug('bn')
             out = tf.nn.batch_normalization(x, mean, var, 
                     offset=beta, scale=gamma, 
                     variance_epsilon=self.epsilon, name='bn')
@@ -288,7 +290,7 @@ class SuperMBConvBlock(Model):
         strides = [strides]*2 if type(strides) == int else strides
         max_expand_filters = max_filters_in * max_expand_ratio
 
-        if max_expand_filters != 1:
+        if max_expand_ratio != 1:
             self.expand_conv = SuperConv2d(max_filters_in=max_filters_in, 
                  max_filters_out=max_expand_filters,
                  max_kernel_size=1, 
