@@ -423,10 +423,9 @@ class SuperCSMBConvBlock(Model):
         #print('filters_in', expand_filters)
 
         #Depthwise Convlution
-        self.extract = {}
+        self.extract = []
         for k_size in kernel_size:
-            self.extract[k_size] = []
-            self.extract[k_size].append(SuperDepthwiseConv2D(max_filters_in=max_expand_filters,
+            self.extract.append(SuperDepthwiseConv2D(max_filters_in=max_expand_filters,
                                          max_kernel_size=k_size, 
                                          strides=strides, 
                                          padding='SAME', 
@@ -437,8 +436,8 @@ class SuperCSMBConvBlock(Model):
                                          depthwise_regularizer=tf.keras.regularizers.l2(weight_decay), 
                                          name=str(k_size)+'_'+'extract_dconv'))
 
-            self.extract[k_size].append(SuperBatchNormalization(max_expand_filters, name=str(k_size)+'_'+'extract_bn'))
-            self.extract[k_size].append(Activation(activation, name=str(k_size)+'_'+activation))
+            self.extract.append(SuperBatchNormalization(max_expand_filters, name=str(k_size)+'_'+'extract_bn'))
+            self.extract.append(Activation(activation, name=str(k_size)+'_'+activation))
 
         
         self.project_conv = SuperConv2d(max_filters_in=max_expand_filters, 
@@ -481,10 +480,10 @@ class SuperCSMBConvBlock(Model):
                 x = self.expand_act(x)
 
 
-
-            x = self.extract[kernel_size][0](x, training, kernel_size=kernel_size, depth_multiplier=1)
-            x = self.extract[kernel_size][1](x, training=training)
-            x = self.extract[kernel_size][2](x)
+            idx = self.kernel_size.index(kernel_size)
+            x = self.extract[idx](x, training, kernel_size=kernel_size, depth_multiplier=1)
+            x = self.extract[idx+1](x, training=training)
+            x = self.extract[idx+2](x)
 
             x = self.project_conv(x, training, filters_out = filters_out, kernel_size=1)
             x = self.project_bn(x, training=training)
