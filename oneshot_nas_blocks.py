@@ -376,3 +376,122 @@ class SuperMBConvBlock(Model):
                 x = x + origin
             
             return x
+
+
+class SuperCSMBConvBlock(Model):
+    def __init__(self, 
+                max_filters_in,
+                max_filters_out, 
+                max_expand_ratio, 
+                kernel_size,
+                se_ratio, 
+                weight_decay, 
+                strides , 
+                use_shortcut=True,
+                drop_connect_rate=None, 
+                data_format=None,
+                activation='relu6', 
+                name=None, **kwargs):
+        super(SuperCSMBConvBlock, self).__init__(name=name, **kwargs)
+        
+        self.use_shortcut = use_shortcut
+        self.max_filters_in = max_filters_in
+        self.max_filters_out = max_filters_out
+        self.max_expand_ratio = max_expand_ratio
+        self.kernel_size =  kernel_size
+
+        
+        strides = [strides]*2 if type(strides) == int else strides
+        max_expand_filters = max_filters_in * max_expand_ratio
+
+        if max_expand_ratio != 1:
+            self.expand_conv = SuperConv2d(max_filters_in=max_filters_in, 
+                 max_filters_out=max_expand_filters,
+                 max_kernel_size=1, 
+                 strides=(1, 1), 
+                 padding='SAME', 
+                 data_format=data_format,
+                 use_bias=False,
+                 kernel_initializer='he_normal', 
+                 kernel_regularizer=tf.keras.regularizers.l2(weight_decay), 
+                 name='expand_conv')
+            self.expand_bn = SuperBatchNormalization(max_expand_filters, name='bn')
+            self.expand_act = Activation(activation, name = activation)
+
+
+
+        #print('filters_in', expand_filters)
+
+        #Depthwise Convlution
+        self.extract = {}
+        for k_size in kernel_size:
+            self.extract[k_size] = []
+            self.extract[k_size].append(SuperDepthwiseConv2D(max_filters_in=max_expand_filters,
+                                         max_kernel_size=k_size, 
+                                         strides=strides, 
+                                         padding='SAME', 
+                                         max_depth_multiplier=1,
+                                         data_format=data_format,
+                                         use_bias=False,
+                                         depthwise_initializer='he_normal', 
+                                         depthwise_regularizer=tf.keras.regularizers.l2(weight_decay), 
+                                         name='extract_dconv'))
+
+            self.extract[k_size].append(SuperBatchNormalization(max_expand_filters, name='extract_bn'))
+            self.extract[k_size].append(Activation(activation, name=activation))
+
+        
+        self.project_conv = SuperConv2d(max_filters_in=max_expand_filters, 
+                 max_filters_out=max_filters_out,
+                 max_kernel_size=1, 
+                 strides=(1, 1), 
+                 padding='SAME', 
+                 data_format=data_format,
+                 use_bias=False,
+                 kernel_initializer='he_uniform', 
+                 kernel_regularizer=tf.keras.regularizers.l2(weight_decay), 
+                 name='project_conv')
+        self.project_bn = SuperBatchNormalization(max_filters_out, name='project_bn')
+        self.project_act = Activation(activation, name=activation)
+        
+
+        if use_shortcut:
+            if drop_connect_rate and (0.0 < drop_connect_rate < 1.0) :
+                self.dp = layers.Dropout(drop_connect_rate, noise_shape=(None, 1, 1, 1),
+                                   name='dp')
+            else:
+                self.dp = lambda x, training : x
+
+        
+    def call(self, x, training, filters_out=None, expand_ratio=None, kernel_size=None):
+            kernel_size = kernel_size if kernel_size is not None else self.max_kernel_size
+            filters_out = filters_out if filters_out is not None else self.max_filters_out
+            expand_ratio = expand_ratio if expand_ratio is not None else self.max_expand_ratio
+            
+            filters_in = x.shape[-1]
+            assert kernel_size in self.kernel_size
+            assert filters_in <= self.max_filters_in
+            assert filters_out <= self.max_filters_out
+            assert expand_ratio <= self.max_expand_ratio
+            
+            origin = x
+            if self.max_expand_ratio != 1:
+                x = self.expand_conv(x, training, kernel_size=1, filters_out=filters_in*expand_ratio)
+                x = self.expand_bn(x, training=training)
+                x = self.expand_act(x)
+
+
+
+            x = self.extract[kernel_size][0](x, training, kernel_size=kernel_size, depth_multiplier=1)
+            x = self.extract[kernel_size][1](x, training=training)
+            x = self.extract[kernel_size][2](x)
+
+            x = self.project_conv(x, training, filters_out = filters_out, kernel_size=1)
+            x = self.project_bn(x, training=training)
+            x = self.project_act(x)
+            
+            if self.use_shortcut and origin.shape[1:] == x.shape[1:]:
+                x = self.dp(x, training)
+                x = x + origin
+            
+            return x

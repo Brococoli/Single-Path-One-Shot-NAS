@@ -95,7 +95,7 @@ SEARCH_SPACE={
 
   
 
-def get_nas_model(type_name, load_path=None):
+def get_nas_model(type_name, blocks_type='mix', load_path=None, ):
     model = SinglePathOneShot(dropout_rate=0.2,
                       drop_connect_rate=0.,
                       depth_divisor=8,
@@ -107,6 +107,7 @@ def get_nas_model(type_name, load_path=None):
                       include_top=True,
                       pooling=None,
                       initializer = 'he_normal',
+                      blocks_type = blocks_type,
                       num_classes=10575,
                       weight_decay = 1e-4)
     if load_path:
@@ -116,8 +117,8 @@ def get_nas_model(type_name, load_path=None):
 
 def test():
     model = get_nas_model('mobilenetv2-b0')
-    model.save_weights('save.tf/')
-    model = get_nas_model('mobilenetv2-b0', 'save.tf/')
+    #model.save_weights('save.tf/')
+    #model = get_nas_model('mobilenetv2-b0', 'save.tf/')
     model = get_nas_model('spos-b0')
 
 if __name__ == '__main__':

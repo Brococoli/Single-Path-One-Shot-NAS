@@ -79,12 +79,12 @@ class Trainer(object):
 
             self.lr_plan(epoch)
             for idx, (images, labels) in enumerate(train_ds):
-                archs = self.get_archs(epoch) ############
+                archs = self.get_archs(epoch) 
                 loss, acc = self.train_step(images, labels, archs)
                 train_probar.update(idx+1, values=[['accuracy', acc], ['loss', loss]])
 
             for idx, (images, labels) in enumerate(val_ds):
-                archs = self.get_archs(epoch) ##############
+                archs = self.get_archs(epoch) 
                 loss, acc = self.val_step(images, labels, archs)
                 val_probar.update(idx+1, values=[['val_accuracy', acc], ['val_loss', loss]])
 
@@ -102,7 +102,7 @@ def train():
 
     logging.info('beging train...')
 
-    model = get_nas_model('mobilenetv2-b0')
+    model = get_nas_model('mobilenetv2-b0', blocks_type='nomix')
     logging.debug('get a nas model')
 
     data = get_webface()
