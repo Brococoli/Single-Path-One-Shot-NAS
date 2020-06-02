@@ -435,10 +435,10 @@ class SuperCSMBConvBlock(Model):
                                          use_bias=False,
                                          depthwise_initializer='he_normal', 
                                          depthwise_regularizer=tf.keras.regularizers.l2(weight_decay), 
-                                         name='extract_dconv'))
+                                         name=str(k_size)+'_'+'extract_dconv'))
 
-            self.extract[k_size].append(SuperBatchNormalization(max_expand_filters, name='extract_bn'))
-            self.extract[k_size].append(Activation(activation, name=activation))
+            self.extract[k_size].append(SuperBatchNormalization(max_expand_filters, name=str(k_size)+'_'+'extract_bn'))
+            self.extract[k_size].append(Activation(activation, name=str(k_size)+'_'+activation))
 
         
         self.project_conv = SuperConv2d(max_filters_in=max_expand_filters, 

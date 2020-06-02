@@ -106,19 +106,23 @@ def train():
     logging.debug('get a nas model')
 
     data = get_webface()
+    data['train_ds'] = data['train_ds'].take(500)
+    data['train_num'] = 500
+    data['val_ds'] = data['val_ds'].take(500)
+    data['val_num'] = 500
 
     trainer = Trainer(model, data, optimizer=tf.keras.optimizers.Adam(1e-3), flops_constant=120)
     logging.debug('get a trainer')
 
 
 
-    trainer.train(90, 160)
+    trainer.train(90, 64)
 
 
 if __name__ == '__main__':
     import os,logging
-    os.environ['CUDA_VISIBLE_DEVICES'] = '1'
-    #tf.get_logger().setLevel(logging.ERROR)
+    os.environ['CUDA_VISIBLE_DEVICES'] = '0'
+    tf.get_logger().setLevel(logging.ERROR)
     import tensorflow as tf
 
     gpus = tf.config.experimental.list_physical_devices(device_type='GPU')
