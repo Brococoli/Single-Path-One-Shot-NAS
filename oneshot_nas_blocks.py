@@ -481,9 +481,10 @@ class SuperCSMBConvBlock(Model):
 
 
             idx = self.kernel_size.index(kernel_size)
-            x = self.extract[idx](x, training, kernel_size=kernel_size, depth_multiplier=1)
-            x = self.extract[idx+1](x, training=training)
-            x = self.extract[idx+2](x)
+            ll = len(self.kernel_size)
+            x = self.extract[idx*ll](x, training, kernel_size=kernel_size, depth_multiplier=1)
+            x = self.extract[idx*ll+1](x, training=training)
+            x = self.extract[idx*ll+2](x)
 
             x = self.project_conv(x, training, filters_out = filters_out, kernel_size=1)
             x = self.project_bn(x, training=training)

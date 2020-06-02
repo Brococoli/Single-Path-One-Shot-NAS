@@ -69,8 +69,8 @@ class Trainer(object):
         train_num = self.data['train_num']
         val_ds = self.data['val_ds']
         val_num = self.data['val_num']
-        train_ds = train_ds.shuffle(1000).batch(batch_size).prefetch(100)
-        val_ds = val_ds.batch(batch_size).prefetch(100)
+        train_ds = train_ds.shuffle(1000).batch(batch_size).prefetch(500)
+        val_ds = val_ds.batch(batch_size).prefetch(500)
 
         epochs_probar = tf.keras.utils.Progbar(epochs)   
         for epoch in range(epochs):
@@ -78,6 +78,8 @@ class Trainer(object):
             val_probar = tf.keras.utils.Progbar(ceil(val_num/batch_size))     #
 
             self.lr_plan(epoch)
+            epochs_probar.update(epoch+1)
+            print()
             for idx, (images, labels) in enumerate(train_ds):
                 archs = self.get_archs(epoch) 
                 loss, acc = self.train_step(images, labels, archs)
@@ -88,7 +90,6 @@ class Trainer(object):
                 loss, acc = self.val_step(images, labels, archs)
                 val_probar.update(idx+1, values=[['val_accuracy', acc], ['val_loss', loss]])
 
-            epochs_probar.update(epoch+1)
 
             self.model.save_weights('training_data/checkpoing/'+\
                 'weights_{epoch:03d}-{val_loss:.4f}-{val_accuracy:.4f}.tf/'.format(epoch=epoch, val_loss=loss, val_accuracy=acc))
@@ -106,17 +107,19 @@ def train():
     logging.debug('get a nas model')
 
     data = get_webface()
+    """
     data['train_ds'] = data['train_ds'].take(500)
     data['train_num'] = 500
     data['val_ds'] = data['val_ds'].take(500)
     data['val_num'] = 500
+    """
 
     trainer = Trainer(model, data, optimizer=tf.keras.optimizers.Adam(1e-3), flops_constant=120)
     logging.debug('get a trainer')
 
 
 
-    trainer.train(90, 64)
+    trainer.train(90, 160)
 
 
 if __name__ == '__main__':
