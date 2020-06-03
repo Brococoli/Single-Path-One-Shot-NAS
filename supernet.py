@@ -116,6 +116,7 @@ def get_nas_model(type_name, blocks_type='mix', load_path=None, ):
     return model
 
 def test():
+    global model
     model = get_nas_model('mobilenetv2-b0', blocks_type='nomix')
     model.save_weights('save.tf/')
     model = get_nas_model('mobilenetv2-b0', blocks_type='nomix', load_path='save.tf/')

@@ -65,10 +65,6 @@ def get_cifar10(verbose=True):
     (X_train, y_train), (X_test, y_test) = tf.keras.datasets.cifar10.load_data()
     X_train = tf.cast(X_train, tf.float32) / 255.0
     X_test = tf.cast(X_test, tf.float32) / 255.0
-    X_train = X_train[:1000]
-    y_train = y_train[:1000]
-    X_test = X_test[:1000]
-    y_test = y_test[:1000]
 
 
 
