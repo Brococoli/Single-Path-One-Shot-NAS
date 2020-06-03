@@ -61,7 +61,7 @@ SearchArgs(width_ratio=[1], kernel_size=[3], expand_ratio=[6]) for i in range(su
 ]
 
 SPOS_SEARCH_ARGS = [
-SearchArgs(width_ratio=np.arange(0.2,2.1,0.2), kernel_size=[3,5,7], expand_ratio=range(2,6)) for i in range(sum(arg.num_repeat for arg in SPOS_BLOCKS_ARGS))
+SearchArgs(width_ratio=np.arange(0.2,2.1,0.2), kernel_size=[3,5,7], expand_ratio=range(2,6) if i else [1]) for i in range(sum(arg.num_repeat for arg in SPOS_BLOCKS_ARGS))
 ]
 
 
@@ -73,16 +73,17 @@ def archs_choice(search_args):
                   expand_ratio=choice(arg.expand_ratio))
   return archs
 
-def archs_choice_with_constant(input_shape, search_args, blocks_args, flops_constant, params_constant):
+def archs_choice_with_constant(input_shape, search_args, blocks_args, flops_constant, params_constant, flops_params=False):
   while True:
     arch = archs_choice(search_args)
     flops, params = get_flops_params(input_shape, search_args=arch, blocks_args=blocks_args)
-    flops /= 1000000
-    params /= 1000000
     if flops < flops_constant and params < params_constant:
       break
     #logging.debug('Search a arch: %d %d' % (flops, params))
-  return arch
+  if flops_params == False:
+    return arch
+  else:
+    return arch, flops, params
 
 
 class SinglePathOneShot(Model):

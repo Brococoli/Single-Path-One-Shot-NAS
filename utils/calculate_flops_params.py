@@ -77,6 +77,8 @@ def get_flops_params(input_shape, blocks_args, search_args, ):
 
     assert num_blocks == len(search_args)
 
+    flops /= 1000000
+    params /= 1000000
     return flops, params
 
 def test():

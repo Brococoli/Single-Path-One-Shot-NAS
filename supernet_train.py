@@ -37,7 +37,7 @@ class Trainer(object):
                 search_args[idx] = arg._replace(width_ratio=[max(arg.width_ratio)])
         elif epoch < 40:
             for idx, arg in enumerate(search_args):
-                search_args[idx] = arg._replace(width_ratio=arg.width_ratio[:-(epoch-28)]) 
+                search_args[idx] = arg._replace(width_ratio=arg.width_ratio[-(epoch-28):]) 
 
         return search_args
         

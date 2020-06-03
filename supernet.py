@@ -69,25 +69,25 @@ SEARCH_SPACE={
     'spos-b0':{
     'blocks_args': SPOS_BLOCKS_ARGS,
     'search_args': [
-            SearchArgs(width_ratio=np.arange(0.2,2.1,0.2), kernel_size=[3,5,7], expand_ratio=range(2,6)) for i in range(sum(arg.num_repeat for arg in SPOS_BLOCKS_ARGS))
+            SearchArgs(width_ratio=np.arange(0.2,2.1,0.2), kernel_size=[3,5,7], expand_ratio=range(2,6) if i else [1]) for i in range(sum(arg.num_repeat for arg in SPOS_BLOCKS_ARGS))
         ]
     },
     'spos-b1':{
     'blocks_args': BLOCK_ARGS_A,
     'search_args': [
-            SearchArgs(width_ratio=np.arange(0.2,2.1,0.2), kernel_size=[3,5,7], expand_ratio=range(2,6)) for i in range(sum(arg.num_repeat for arg in BLOCK_ARGS_A))
+            SearchArgs(width_ratio=np.arange(0.2,2.1,0.2), kernel_size=[3,5,7], expand_ratio=range(2,6) if i else [1]) for i in range(sum(arg.num_repeat for arg in BLOCK_ARGS_A))
         ]
     },
     'spos-b2':{
     'blocks_args': BLOCK_ARGS_B,
     'search_args': [
-            SearchArgs(width_ratio=np.arange(0.2,2.1,0.2), kernel_size=[3,5,7], expand_ratio=range(2,6)) for i in range(sum(arg.num_repeat for arg in BLOCK_ARGS_B))
+            SearchArgs(width_ratio=np.arange(0.2,2.1,0.2), kernel_size=[3,5,7], expand_ratio=range(2,6) if i else [1]) for i in range(sum(arg.num_repeat for arg in BLOCK_ARGS_B))
         ]
     },
     'spos-b3':{
     'blocks_args': BLOCK_ARGS_C,
     'search_args': [
-            SearchArgs(width_ratio=np.arange(0.2,2.1,0.2), kernel_size=[3,5,7], expand_ratio=range(2,6)) for i in range(sum(arg.num_repeat for arg in BLOCK_ARGS_C))
+            SearchArgs(width_ratio=np.arange(0.2,2.1,0.2), kernel_size=[3,5,7], expand_ratio=range(2,6) if i else [1]) for i in range(sum(arg.num_repeat for arg in BLOCK_ARGS_C))
         ]
     },
 }
