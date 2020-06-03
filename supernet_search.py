@@ -128,9 +128,9 @@ class TopKHeap(object):
 
     def push(self, net):
         if self.search_target == 'acc':
-            self.data.sort(key=lambda d:d['acc'], reversed=True)
+            self.data.sort(key=lambda d:d['acc'], reverse=True)
         elif self.search_target == 'flops_acc':
-            self.data.sort(key=lambda d:d['acc']/d['flops_score'], reversed=True)
+            self.data.sort(key=lambda d:d['acc']/d['flops_score'], reverse=True)
         else:
             raise ValueError("Unrecognized search-target: {}".format(self.search_target))
 
@@ -169,7 +169,7 @@ class Evolver(object):
 
             logging.info("Population size + 1, total {}, with normalized score: {:.4f}, flops score: {:.4f}, params score: {:.4f}"
                   .format(i+1, combined_score, flops_score, params_score))
-
+            logging.info('flops: %.4f, params: %.4f' % (flops, params))
             instance['arch'] = arch
             instance['flops'] = flops
             instance['params'] = params
@@ -287,9 +287,9 @@ def search(type='genetic_search'):
     load_path = ''
     model = get_nas_model(type_name, blocks_type='nomix', load_path=load_path)
 
-    data = get_cifar10()
+    data = get_webface()
 
-    flops_constant = 120
+    flops_constant = 100
     params_constant = math.inf
 
     logging.info('random search begining...')
@@ -305,5 +305,5 @@ def search(type='genetic_search'):
 
 if __name__ == '__main__':
     import os,logging
-    os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
+    os.environ['CUDA_VISIBLE_DEVICES'] = '1'
     search('genetic_search')
