@@ -127,24 +127,17 @@ class TopKHeap(object):
         self.search_target = kwargs.get('search_target', 'acc')
 
     def push(self, net):
-        if len(self.data) < self.k:
-            heapq.heappush(self.data, net)
+        if self.search_target == 'acc':
+            self.data.sort(key=lambda d:d['acc'], reversed=True)
+        elif self.search_target == 'flops_acc':
+            self.data.sort(key=lambda d:d['acc']/d['flops_score'], reversed=True)
         else:
-            if self.search_target == 'acc':
-                score = net['acc']
-                old_score = self.data[0]['acc']
-            elif self.search_target == 'flops_acc':
-                score = net['acc']/net['flops_score']
-                old_score = self.data[0]['acc']/self.data[0]['flops_score']
-            else:
-                raise ValueError("Unrecognized search-target: {}".format(self.search_target))
+            raise ValueError("Unrecognized search-target: {}".format(self.search_target))
 
-            if score > old_score:
-                heapq.heapreplace(self.data, net)
-                logging.info('Search a better archs, flops: {flops:.1f}, params: {params:.1f}, val_acc: {acc:.4f}'.format(**net))
+        self.data = self.data[:self.k]
 
     def get(self):
-        return reversed([heapq.heappop(self.data) for _ in range(len(self.data))])
+        return self.data
         
 
 class Evolver(object):
