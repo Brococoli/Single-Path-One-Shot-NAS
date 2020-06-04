@@ -63,7 +63,7 @@ SEARCH_SPACE={
     'mobilenetv2-b0':{
     'blocks_args': DEFAULT_BLOCKS_ARGS,
     'search_args': [
-            SearchArgs(width_ratio=np.arange(0.2,1.7,0.2), kernel_size=[3,5,7], expand_ratio=range(2,6) if i else [1]) for i in range(sum(arg.num_repeat for arg in DEFAULT_BLOCKS_ARGS))
+            SearchArgs(width_ratio=np.arange(0.2,2.1,0.2), kernel_size=[3,5,7], expand_ratio=range(2,6) if i else [1]) for i in range(sum(arg.num_repeat for arg in DEFAULT_BLOCKS_ARGS))
         ]
     },
     'spos-b0':{

@@ -6,6 +6,7 @@ from utils.calculate_flops_params import get_flops_params
 from utils.data import get_webface, get_cifar10
 import math
 from math import ceil
+from copy import deepcopy
 
 class Trainer(object):
     """supernet trainer"""
@@ -30,15 +31,11 @@ class Trainer(object):
         tf.keras.backend.set_value(self.optimizer.lr, lr)
 
     def search_plan(self, epoch):
-        search_args = self.model.search_args.copy()
+        search_args = deepcopy(self.model.search_args)
         #warm up
-        if epoch < 30: # dont search width_ratio
-            for idx, arg in enumerate(search_args):
-                search_args[idx] = arg._replace(width_ratio=[max(arg.width_ratio)])
-        elif epoch < 40:
-            for idx, arg in enumerate(search_args):
-                search_args[idx] = arg._replace(width_ratio=arg.width_ratio[-(epoch-28):]) 
-
+        for idx, arg in enumerate(search_args):
+            search_args[idx] = arg._replace(width_ratio=arg.width_ratio[:(epoch//3+2)],
+                    expand_ratio=arg.expand_ratio[:(epoch//3+2)]) 
         return search_args
         
     def train_step(self, images, labels, search_args):

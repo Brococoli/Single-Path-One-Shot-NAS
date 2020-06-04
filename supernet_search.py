@@ -18,9 +18,9 @@ class Searcher(object):
         #prefetch imgs
         update_bn_imgs = kwargs.get('update_bn_imgs', 20000)
         self.batch_size = kwargs.get('batch_size', 128)
-        data['train_ds'] = data['train_ds'].take(update_bn_imgs).batch(self.batch_size).prefetch(100)
+        data['train_ds'] = data['train_ds'].take(update_bn_imgs).batch(self.batch_size).prefetch(500)
         data['train_num'] = update_bn_imgs
-        data['val_ds'] = data['val_ds'].batch(self.batch_size).prefetch(100)
+        data['val_ds'] = data['val_ds'].batch(self.batch_size).prefetch(500)
         
         
         self.data = data
@@ -112,8 +112,8 @@ def genetic_search(model, data, search_iters=1000, **kwargs):
     probar = tf.keras.utils.Progbar(search_iters)
     logging.info('start evolve...')
     for _ in range(search_iters):
-        population = evolver.evolve(population, topk_items=result)
         probar.add(1)
+        population = evolver.evolve(population, topk_items=result)
         np.save(file_name, result.get(), allow_pickle=True)
     logging.info('evolve done...')
     return result.get()
