@@ -333,7 +333,6 @@ class SuperMBConvBlock(Model):
                  kernel_regularizer=tf.keras.regularizers.l2(weight_decay), 
                  name='project_conv')
         self.project_bn = SuperBatchNormalization(max_filters_out, name='project_bn')
-        self.project_act = Activation(activation, name=activation)
         
 
         if use_shortcut:
@@ -369,7 +368,6 @@ class SuperMBConvBlock(Model):
 
             x = self.project_conv(x, training, filters_out = filters_out, kernel_size=1)
             x = self.project_bn(x, training=training)
-            x = self.project_act(x)
             
             if self.use_shortcut and origin.shape[1:] == x.shape[1:]:
                 x = self.dp(x, training)
