@@ -16,11 +16,11 @@ class Searcher(object):
     def __init__(self, model, data, **kwargs):
         super(Searcher, self).__init__()
         #prefetch imgs
-        update_bn_imgs = kwargs.get('update_bn_imgs', 20000)
+        update_bn_imgs = kwargs.get('update_bn_imgs', 30000)
         self.batch_size = kwargs.get('batch_size', 128)
-        data['train_ds'] = data['train_ds'].take(update_bn_imgs).batch(self.batch_size).prefetch(500)
+        data['train_ds'] = data['train_ds'].take(update_bn_imgs).batch(self.batch_size).prefetch(200)
         data['train_num'] = update_bn_imgs
-        data['val_ds'] = data['val_ds'].batch(self.batch_size).prefetch(500)
+        data['val_ds'] = data['val_ds'].batch(self.batch_size).prefetch(200)
         
         
         self.data = data
@@ -67,6 +67,177 @@ class Searcher(object):
             acc = acc_metrics(labels, logits)
             probar.update(idx+1, values=[['val_acc', acc]])
         return acc
+
+
+class TopKHeap(object):
+    """save the best k arch"""
+    def __init__(self, k, **kwargs):
+        super(TopKHeap, self).__init__()
+        self.k = k
+        self.data = []
+        self.search_target = kwargs.get('search_target', 'acc')
+
+    def push(self, net):
+        self.data.append(net)
+        if self.search_target == 'acc':
+            self.data.sort(key=lambda d:d['acc'], reverse=True)
+        elif self.search_target == 'flops_acc':
+            self.data.sort(key=lambda d:d['acc']/d['flops_score'], reverse=True)
+        else:
+            raise ValueError("Unrecognized search-target: {}".format(self.search_target))
+
+        self.data = self.data[:self.k]
+        if net == self.data[0]:
+            logging.info('Find a better archs, acc:{acc:.4f}, flops:{flops:.2f}, params:{params:.2f}'.format(**net))
+
+    def get(self):
+        return self.data
+        
+
+class Evolver(object):
+    """docstring for Evolver"""
+    def __init__(self, model, data, population_size=500, retain_length=100, random_select=0.1, mutate_chance=0.1, **kwargs):
+        super(Evolver, self).__init__()
+
+        self.population_size = population_size
+        self.retain_length = retain_length
+        self.random_select = random_select
+        self.mutate_chance = mutate_chance
+        self.search_target = kwargs.get('search_target', 'acc')
+
+        self.searcher = Searcher(model, data, **kwargs)
+
+    def create_population(self):
+        """create a population of random networks
+        Return: (list): population of random archs networks
+        """
+        population = []
+        for i in range(self.population_size):
+            instance = {}
+
+            arch, flops, params = archs_choice_with_constant(self.searcher.data['imgs_shape'], 
+                                self.searcher.model.search_args, self.searcher.model.blocks_args, 
+                                flops_constant=self.searcher.flops_constant, params_constant=self.searcher.params_constant, flops_params=True)
+            flops_score, params_score = flops  / self.searcher.flops_constant, params  / self.searcher.params_constant
+            combined_score = 0.5 * flops_score + 0.5* params_score
+
+            logging.info("Population size + 1, total {}, with normalized score: {:.4f}, flops: {:.4f}, params: {:.4f}"
+                  .format(i+1, combined_score, flops, params))
+            #logging.info('flops: %.4f, params: %.4f' % (flops, params))
+            instance['arch'] = arch
+            instance['flops'] = flops
+            instance['params'] = params
+            instance['flops_score'] = flops_score
+            instance['params_score'] = params_score
+            instance['combined_score'] = combined_score
+            population.append(instance)
+        return population
+
+    def fitness(self, arch):
+        
+        logging.info('start update bn...')
+        self.searcher.update_bn(arch)
+        logging.info('update bn done...')
+
+        logging.info('begin cal val acc...')
+        acc = self.searcher.get_accuracy(arch)
+        logging.info('cal val acc done...')
+
+        return acc
+
+    def breed(self, mother, father):
+        """makr two children
+        Args:
+            mother (dict): Network parameter
+            father (dict): network parameter
+        Return:
+            (list) : Two network object
+        """
+        children = []
+        for _ in range(2):
+            child = {'arch': deepcopy(mother['arch']) }
+            assert len(mother['arch']) == len(father['arch'])
+            for idx, (mother_search_arg, father_search_arg) in enumerate(zip(mother['arch'], father['arch'])):
+                child['arch'][idx] = child['arch'][idx]._replace(
+                        width_ratio = choice([mother_search_arg.width_ratio, father_search_arg.width_ratio])\
+                            if self.mutate_chance < random() else choice(self.searcher.model.search_args[idx].width_ratio),
+                        expand_ratio = choice([mother_search_arg.expand_ratio, father_search_arg.expand_ratio])\
+                            if self.mutate_chance < random() else choice(self.searcher.model.search_args[idx].expand_ratio),
+                        kernel_size = choice([mother_search_arg.kernel_size, father_search_arg.kernel_size])\
+                            if self.mutate_chance < random() else choice(self.searcher.model.search_args[idx].kernel_size),
+                    )
+            children.append(child)
+        return children
+
+    def evolve(self, population, topk_items, ):
+        """evolve a population of network"""
+
+        #fitness
+        logging.info('start fitness...')
+        for person in population:
+            if 'acc' not in person.keys():
+                person['acc'] = self.fitness(person['arch'])
+                topk_items.push(deepcopy(person))
+        
+        if self.search_target == 'flops_acc': ## 
+            population.sort(key=lambda x: x['acc']/x['flops_acc'], reverse=True)
+        elif self.search_target == 'acc':
+            population.sort(key=lambda x: x['acc'], reverse=True)
+        else:
+            raise ValueError('Unrecognized search target: {}'.format(self.search_target))
+
+        # the parents we want to keep
+        parents = population[:self.retain_length]
+
+        # for those wo arenot want to keeping, we randomly keep some anyway
+        for retain_person in population[self.retain_length:]:
+            if self.random_select > random():
+                parents.append(retain_person)
+
+        parents_length = len(parents)
+        desired_length = len(population) - parents_length
+        children = []
+
+        logging.info('select person number {}...'.format(len(parents)))
+        logging.info('start breed...')
+        while len(children) < desired_length:
+            mother = father = None
+            while mother == father:
+                mother = choice(parents)
+                father = choice(parents)
+
+            childs = self.breed(mother, father)
+
+            for child in childs:
+                if len(children) >= desired_length:
+                    break
+
+                flops, params = get_flops_params(self.searcher.data['imgs_shape'], 
+                                    search_args=child['arch'], blocks_args=self.searcher.model.blocks_args, )
+                flops_score, params_score = flops  / self.searcher.flops_constant, params  / self.searcher.params_constant
+                combined_score = 0.5 * flops_score + 0.5* params_score
+                if flops > self.searcher.flops_constant or params > self.searcher.params_constant:
+                    logging.info('[SKIPPED] child model, flops:{flops:.1f}, params:{params:.1f}'.format(flops=flops, params=params))
+                    continue
+
+
+                logging.info("children size + 1, with normalized score: {}, flops: {:.1f}, params: {:.1f}"
+                      .format(combined_score, flops, params))
+
+                child['flops'] = flops
+                child['params'] = params
+                child['flops_score'] = flops_score
+                child['params_score'] = params_score
+                child['combined_score'] = combined_score
+                children.append(child)
+
+        parents.extend(children)
+        logging.info('breed done, parents number {}...'.format(len(parents)))
+        assert len(parents) == self.population_size, (len(parnets), self.population_size)
+
+        return parents
+
+
 
 def random_search(model, data, search_iters=1000, **kwargs):
     searcher = Searcher(model, data, **kwargs)
@@ -118,178 +289,19 @@ def genetic_search(model, data, search_iters=1000, **kwargs):
     logging.info('evolve done...')
     return result.get()
 
-class TopKHeap(object):
-    """save the best k arch"""
-    def __init__(self, k, **kwargs):
-        super(TopKHeap, self).__init__()
-        self.k = k
-        self.data = []
-        self.search_target = kwargs.get('search_target', 'acc')
-
-    def push(self, net):
-        if self.search_target == 'acc':
-            self.data.sort(key=lambda d:d['acc'], reverse=True)
-        elif self.search_target == 'flops_acc':
-            self.data.sort(key=lambda d:d['acc']/d['flops_score'], reverse=True)
-        else:
-            raise ValueError("Unrecognized search-target: {}".format(self.search_target))
-
-        self.data = self.data[:self.k]
-
-    def get(self):
-        return self.data
-        
-
-class Evolver(object):
-    """docstring for Evolver"""
-    def __init__(self, model, data, population_size=500, retain_length=100, random_select=0.1, mutate_chance=0.1, **kwargs):
-        super(Evolver, self).__init__()
-
-        self.population_size = population_size
-        self.retain_length = retain_length
-        self.random_select = random_select
-        self.mutate_chance = mutate_chance
-        self.search_target = kwargs.get('search_target', 'acc')
-
-        self.searcher = Searcher(model, data, **kwargs)
-
-    def create_population(self):
-        """create a population of random networks
-        Return: (list): population of random archs networks
-        """
-        population = []
-        for i in range(self.population_size):
-            instance = {}
-
-            arch, flops, params = archs_choice_with_constant(self.searcher.data['imgs_shape'], 
-                                self.searcher.model.search_args, self.searcher.model.blocks_args, 
-                                flops_constant=self.searcher.flops_constant, params_constant=self.searcher.params_constant, flops_params=True)
-            flops_score, params_score = flops  / self.searcher.flops_constant, params  / self.searcher.params_constant
-            combined_score = 0.5 * flops_score + 0.5* params_score
-
-            logging.info("Population size + 1, total {}, with normalized score: {:.4f}, flops score: {:.4f}, params score: {:.4f}"
-                  .format(i+1, combined_score, flops_score, params_score))
-            logging.info('flops: %.4f, params: %.4f' % (flops, params))
-            instance['arch'] = arch
-            instance['flops'] = flops
-            instance['params'] = params
-            instance['flops_score'] = flops_score
-            instance['params_score'] = params_score
-            instance['combined_score'] = combined_score
-            population.append(instance)
-        return population
-
-    def fitness(self, arch):
-        
-        logging.info('start update bn...')
-        self.searcher.update_bn(arch)
-        logging.info('update bn done...')
-
-        logging.info('begin cal val acc...')
-        acc = self.searcher.get_accuracy(arch)
-        logging.info('cal val acc done...')
-
-        return acc
-
-    def breed(self, mother, father):
-        """makr two children
-        Args:
-            mother (dict): Network parameter
-            father (dict): network parameter
-        Return:
-            (list) : Two network object
-        """
-        children = []
-        for _ in range(2):
-            child = deepcopy(mother)
-            assert len(mother['arch']) == len(father['arch'])
-            for idx, (mother_search_arg, father_search_arg) in enumerate(zip(mother['arch'], father['arch'])):
-                child['arch'][idx] = child['arch'][idx]._replace(
-                        width_ratio = choice([mother_search_arg.width_ratio, father_search_arg.width_ratio])\
-                            if self.mutate_chance < random() else choice(self.model.search_args[idx].width_ratio),
-                        expand_ratio = choice([mother_search_arg.expand_ratio, father_search_arg.expand_ratio])\
-                            if self.mutate_chance < random() else choice(self.model.search_args[idx].expand_ratio),
-                        kernel_size = choice([mother_search_arg.kernel_size, father_search_arg.kernel_size])\
-                            if self.mutate_chance < random() else choice(self.model.search_args[idx].kernel_size),
-                    )
-            children.append(child)
-        return children
-
-    def evolve(self, population, topk_items, ):
-        """evolve a population of network"""
-
-        #fitness
-        logging.info('start fitness...')
-        for person in population:
-            if 'acc' not in person.keys():
-                person['acc'] = self.fitness(person['arch'])
-                topk_items.push(deepcopy(person))
-        
-        if self.search_target == 'flops_acc': ## 
-            population.sort(key=lambda x: x['acc']/x['flops_acc'], reversed=True)
-        elif self.search_target == 'acc':
-            population.sort(key=lambda x: x['acc'], reversed=True)
-        else:
-            raise ValueError('Unrecognized search target: {}'.format(self.search_target))
-
-        # the parents we want to keep
-        parents = population[:self.retain_length]
-
-        # for those wo arenot want to keeping, we randomly keep some anyway
-        for retain_person in population[self.retain_length:]:
-            if self.random_select > random():
-                parents.append(retain_person)
-
-        parents_length = len(parents)
-        desired_length = len(population) - parents_length
-        children = []
-
-        while len(children) < desired_length:
-            mother = father = None
-            while mother == father:
-                mother = choice(parents)
-                father = choice(parents)
-
-            childs = self.breed(mother, father)
-
-            for child in childs:
-                if len(children) >= desired_length:
-                    break
-
-                flops, params = get_flops_params(self.searcher.data['imgs_shape'], 
-                                    search_args=child['arch'], blocks_args=self.searcher.model.blocks_args, )
-                flops_score, params_score = flops  / self.flops_constant, params  / self.params_constant
-                combined_score = 0.5 * flops_score + 0.5* params_score
-
-                logging.info("children size + 1, with normalized score: {}, flop score: {}, param score: {}"
-                      .format(combined_score, flops_score, params_score))
-
-                child['flops'] = flops
-                child['params'] = params
-                child['flops_score'] = flops_score
-                child['params_score'] = params_score
-                child['combined_score'] = combined_score
-                children.append(child)
-
-        parents.extend(children)
-
-        return parents
-
-
-
-
 
 
 def search(type='genetic_search'):
     logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s - %(filename)s[line:%(lineno)d] - %(levelname)s: %(message)s')
     type_name = 'mobilenetv2-b0'
-    load_path = ''
+    load_path = 'training_data/checkpoing/weights_073-5.1185-0.2295.tf/'
+    file_name = 'archs_search.npy'
     model = get_nas_model(type_name, blocks_type='nomix', load_path=load_path)
 
     data = get_webface()
 
-    flops_constant = 100
+    flops_constant = 120
     params_constant = math.inf
 
     logging.info('random search begining...')
@@ -297,11 +309,12 @@ def search(type='genetic_search'):
     if type == 'random_search':
         result = random_search(model, data, search_iters=1000, flops_constant=flops_constant, params_constant=params_constant)
     else:
-        result = genetic_search(model, data, search_iters=1000, 
-                flops_constant=flops_constant, params_constant=params_constant, search_target='acc')
+        result = genetic_search(model, data, search_iters=10, 
+                flops_constant=flops_constant, params_constant=params_constant, search_target='acc', retain_length=20, population_size=100, batch_size=200,
+                                    file_name=file_name)
 
-    np.save('arch_search.npy', result, allow_pickle=True)
-    logging.info('random search done')
+    np.save(file_name, result, allow_pickle=True)
+    logging.info('search done')
 
 if __name__ == '__main__':
     import os,logging
