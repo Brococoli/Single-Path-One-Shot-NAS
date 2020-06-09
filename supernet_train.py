@@ -20,9 +20,11 @@ class Trainer(object):
         self.flops_constant = kwargs.get('flops_constant', math.inf)
         self.params_constant = kwargs.get('params_constant', math.inf)
 
-    def acc_func(y_true, y_pred):
-        correct_prediction = tf.equal(tf.argmax(y_pred, 1), tf.cast(y_true, tf.int64))
-        return tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+        self.train_acc = tf.keras.metrics.SparseCategoricalAccuracy(name='train_accuracy')
+        self.val_acc = tf.keras.metrics.SparseCategoricalAccuracy(name='val_accuracy')
+        self.train_loss = tf.keras.metrics.Mean(name='train_loss')
+        self.val_loss = tf.keras.metrics.Mean(name='val_loss')
+
 
     def lr_plan(self, epoch):
         plan = [1e-3, 1e-4]
@@ -48,14 +50,18 @@ class Trainer(object):
             loss += sum(self.model.losses)
         grads = g.gradient(loss, self.model.trainable_variables)
         self.optimizer.apply_gradients(zip(grads, self.model.trainable_variables))
-        acc = Trainer.acc_func(y_true = labels, y_pred = logits)
+
+        acc = self.train_acc(y_true = labels, y_pred = logits)
+        loss = self.train_loss(loss)
         return loss, acc
 
     def val_step(self, images, labels, search_args):
         logits = self.model(images, False, search_args=search_args)
         loss = self.loss_func(y_true = labels, y_pred = logits)
         loss += sum(self.model.losses)
-        acc = Trainer.acc_func(y_true = labels, y_pred = logits)
+
+        acc = self.val_acc(y_true = labels, y_pred = logits)
+        loss = self.val_loss(loss)
         return loss, acc
 
     def get_archs(self,epoch):
@@ -74,7 +80,7 @@ class Trainer(object):
 
         epochs_probar = tf.keras.utils.Progbar(epochs)   
         for epoch in range(epochs):
-            train_probar = tf.keras.utils.Progbar(ceil(train_num/batch_size))    #set value
+            train_probar = tf.keras.utils.Progbar(ceil(train_num/batch_size), stateful_metrics=['accuracy', 'loss'])
 
             self.lr_plan(epoch)
             epochs_probar.update(epoch+1)
@@ -84,7 +90,7 @@ class Trainer(object):
                 loss, acc = self.train_step(images, labels, archs)
                 train_probar.update(idx+1, values=[['accuracy', acc], ['loss', loss]])
 
-            val_probar = tf.keras.utils.Progbar(ceil(val_num/batch_size))     #
+            val_probar = tf.keras.utils.Progbar(ceil(val_num/batch_size), stateful_metrics=['val_accuracy', 'val_loss'])
             for idx, (images, labels) in enumerate(val_ds):
                 archs = self.get_archs(epoch) 
                 loss, acc = self.val_step(images, labels, archs)
@@ -94,6 +100,13 @@ class Trainer(object):
             self.model.save_weights('training_data/checkpoing/'+\
                 'weights_{epoch:03d}-{val_loss:.4f}-{val_accuracy:.4f}.tf/'.format(epoch=epoch, val_loss=loss, val_accuracy=acc))
             logging.info('save the weights..')
+
+            self.train_acc.reset_states()
+            self.val_acc.reset_states()
+            self.train_loss.reset_states()
+            self.val_loss.reset_states()
+            
+            
 
 
 def train():
@@ -106,13 +119,13 @@ def train():
     model = get_nas_model('mobilenetv2-b0', blocks_type='mix', load_path='')
     logging.debug('get a nas model')
 
-    data = get_webface()
-    """
+    data = get_cifar10()
+
     data['train_ds'] = data['train_ds'].take(500)
     data['train_num'] = 500
     data['val_ds'] = data['val_ds'].take(500)
     data['val_num'] = 500
-    """
+
 
     trainer = Trainer(model, data, optimizer=tf.keras.optimizers.Adam(1e-3), flops_constant=100)
     logging.debug('get a trainer')
@@ -124,8 +137,8 @@ def train():
 
 if __name__ == '__main__':
     import os,logging
-    os.environ['CUDA_VISIBLE_DEVICES'] = '0'
-    tf.get_logger().setLevel(logging.ERROR)
+    os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
+    #tf.get_logger().setLevel(logging.ERROR)
     import tensorflow as tf
 
     gpus = tf.config.experimental.list_physical_devices(device_type='GPU')
