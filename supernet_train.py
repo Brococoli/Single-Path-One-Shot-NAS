@@ -103,7 +103,7 @@ def train():
 
     logging.info('beging train...')
 
-    model = get_nas_model('mobilenetv2-b0', blocks_type='nomix', load_path='training_data/checkpoing/weights_089-5.3416-0.1967.tf/')
+    model = get_nas_model('mobilenetv2-b0', blocks_type='mix', load_path='')
     logging.debug('get a nas model')
 
     data = get_webface()
@@ -114,12 +114,12 @@ def train():
     data['val_num'] = 500
     """
 
-    trainer = Trainer(model, data, optimizer=tf.keras.optimizers.Adam(1e-3), flops_constant=120)
+    trainer = Trainer(model, data, optimizer=tf.keras.optimizers.Adam(1e-3), flops_constant=100)
     logging.debug('get a trainer')
 
 
 
-    trainer.train(90, 160)
+    trainer.train(90, 128)
 
 
 if __name__ == '__main__':

@@ -102,7 +102,7 @@ def make_divisible(v, divisor, min_value = None):
     return int(new_v)
 
 class SinglePathOneShot(Model):
-        def __init__(self, 
+    def __init__(self, 
                 dropout_rate=0.2,
                 drop_connect_rate=0.,
                 depth_divisor=8,
@@ -117,7 +117,7 @@ class SinglePathOneShot(Model):
                 num_classes=None,
                 blocks_type='mix',
                 weight_decay = 1e-4, **kwargs):
-            super(SinglePathOneShot, self).__init__(name=model_name, **kwargs)
+        super(SinglePathOneShot, self).__init__(name=model_name, **kwargs)
 
         self.search_args = search_args
         self.blocks_args = blocks_args
@@ -232,13 +232,11 @@ class SinglePathOneShot(Model):
             else:
                 raise ValueError('no pooling:', pooling)
         
-        #temp delete it
-        self.old_output_shape = None
     
     def choice_architecture(self):
         arch = archs_choice(self.search_args)
         return arch
-            
+
 
     def call(self, x, training, search_args=None):
         #logger = logging.getLogger('supernet')
