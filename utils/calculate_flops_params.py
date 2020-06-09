@@ -3,6 +3,18 @@ import tensorflow as tf
 from math import ceil
 
 
+def make_divisible(v, divisor, min_value = None):
+    """ 
+    It ensure that all layers have a channel number that is divisible by 8
+    It can be seen here:
+            https://github.com/tensorflow/models/blob/master/research/slim/nets/mobilenet/mobilenet.py
+    """
+    if min_value is None:
+        min_value = divisor
+    new_v = max(min_value, int(v + divisor / 2) // divisor * divisor)
+    if new_v < 0.9 * v:
+        new_v+=divisor
+    return int(new_v)
 
 def get_flops_params(input_shape, blocks_args, search_args, ):
     params = flops = 0
@@ -18,12 +30,12 @@ def get_flops_params(input_shape, blocks_args, search_args, ):
 
     num_blocks = 0
     for block_arg in blocks_args:
-        K = block_arg.kernel_size
         S = block_arg.strides
 
         for _ in range(block_arg.num_repeat):
             E = search_args[num_blocks].expand_ratio
-            F = ceil(search_args[num_blocks].width_ratio*block_arg.channels)
+            F = make_divisible((search_args[num_blocks].width_ratio*block_arg.channels), 8)
+            K = search_args[num_blocks].kernel_size
             F = max(F, 16)
 
 

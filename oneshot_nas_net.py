@@ -7,6 +7,7 @@ from oneshot_nas_blocks import *
 import logging
 import numpy as np
 from utils.calculate_flops_params import get_flops_params
+from copy import deepcopy
 
 
 
@@ -61,12 +62,12 @@ SearchArgs(width_ratio=[1], kernel_size=[3], expand_ratio=[6]) for i in range(su
 ]
 
 SPOS_SEARCH_ARGS = [
-SearchArgs(width_ratio=np.arange(0.2,2.1,0.2), kernel_size=[3,5,7], expand_ratio=range(2,6) if i else [1]) for i in range(sum(arg.num_repeat for arg in SPOS_BLOCKS_ARGS))
+SearchArgs(width_ratio=np.arange(0.2,2.1,0.2), kernel_size=[3,5,7], expand_ratio=range(2,7) if i else [1]) for i in range(sum(arg.num_repeat for arg in SPOS_BLOCKS_ARGS))
 ]
 
 
 def archs_choice(search_args):
-  archs = search_args.copy()
+  archs = deepcopy(search_args)
   for i, arg in enumerate(search_args):
     archs[i] = archs[i]._replace(width_ratio=choice(arg.width_ratio),
                   kernel_size=choice(arg.kernel_size),
@@ -86,43 +87,57 @@ def archs_choice_with_constant(input_shape, search_args, blocks_args, flops_cons
     return arch, flops, params
 
 
+
+def make_divisible(v, divisor, min_value = None):
+    """ 
+    It ensure that all layers have a channel number that is divisible by 8
+    It can be seen here:
+            https://github.com/tensorflow/models/blob/master/research/slim/nets/mobilenet/mobilenet.py
+    """
+    if min_value is None:
+        min_value = divisor
+    new_v = max(min_value, int(v + divisor / 2) // divisor * divisor)
+    if new_v < 0.9 * v:
+        new_v+=divisor
+    return int(new_v)
+
 class SinglePathOneShot(Model):
-    def __init__(self, 
-                      dropout_rate=0.2,
-                      drop_connect_rate=0.,
-                      depth_divisor=8,
-                      search_args=DEFAULT_SEARCH_ARGS,
-                      blocks_args=DEFAULT_BLOCKS_ARGS,
-                      model_name='SinglePathOneShot',
-                      activation='relu6',
-                      use_se=True,
-                      include_top=True,
-                      pooling=None,
-                      initializer = 'he_normal',
-                      num_classes=None,
-                      blocks_type='mix',
-                      weight_decay = 1e-4, **kwargs):
-        super(SinglePathOneShot, self).__init__(name=model_name, **kwargs)
-        
+        def __init__(self, 
+                dropout_rate=0.2,
+                drop_connect_rate=0.,
+                depth_divisor=8,
+                search_args=DEFAULT_SEARCH_ARGS,
+                blocks_args=DEFAULT_BLOCKS_ARGS,
+                model_name='SinglePathOneShot',
+                activation='relu6',
+                use_se=True,
+                include_top=True,
+                pooling=None,
+                initializer = 'he_normal',
+                num_classes=None,
+                blocks_type='mix',
+                weight_decay = 1e-4, **kwargs):
+            super(SinglePathOneShot, self).__init__(name=model_name, **kwargs)
+
         self.search_args = search_args
         self.blocks_args = blocks_args
 
-        
-        round_width = lambda x : make_divisible(x, depth_divisor)
-        
+
+        self.round_width = lambda x : make_divisible(x, depth_divisor)
+
 
         self.stem = tf.keras.Sequential([layers.Conv2D(32, 
-                                                       kernel_size=3, 
-                                                       strides=2,
-                                                       use_bias=False, 
-                                                       kernel_initializer=initializer, 
-                                                       kernel_regularizer=tf.keras.regularizers.l2(weight_decay),
-                                                       ),
-                                        layers.BatchNormalization(momentum=0.9, epsilon=1e-5,),
-                                        Activation(activation)], name='stem')     
-       
+            kernel_size=3, 
+            strides=2,
+            use_bias=False, 
+            kernel_initializer=initializer, 
+            kernel_regularizer=tf.keras.regularizers.l2(weight_decay),
+            ),
+            layers.BatchNormalization(momentum=0.9, epsilon=1e-5,),
+            Activation(activation)], name='stem')     
+
         block_dropout_rates = tf.linspace(0.0, drop_connect_rate,
-                                          sum(arg.num_repeat for arg in blocks_args))
+                sum(arg.num_repeat for arg in blocks_args))
 
         num_blocks = 0
         max_filters_in = 32
@@ -130,51 +145,51 @@ class SinglePathOneShot(Model):
 
         self.segments_idx = [0]*len(search_args)
         assert len(search_args) == sum(arg.num_repeat for arg in blocks_args), (len(search_args) , sum(arg.num_repeat for arg in blocks_args))
-        
+
         for idx, block_arg in enumerate(blocks_args):
             num_repeat = block_arg.num_repeat
             channels = block_arg.channels
             id_skip = block_arg.id_skip
             strides = block_arg.strides
             se_ratio = block_arg.se_ratio if use_se else None
-            
-            
+
+
             for i in range(num_repeat):
                 max_expand_ratio = max(search_args[num_blocks].expand_ratio)
                 kernel_size = search_args[num_blocks].kernel_size
                 max_kernel_size = max(kernel_size)
-                max_filters_out = ceil(max(search_args[num_blocks].width_ratio)*channels)
+                max_filters_out = self.round_width(max(search_args[num_blocks].width_ratio)*channels)
                 logging.debug('block args: %d, %d, %d' %(max_expand_ratio, max_kernel_size, max_filters_out))
                 self.blocks.append(
                         SuperMBConvBlock(max_filters_in=max_filters_in,  
-                                         max_filters_out=max_filters_out,  
-                                         max_expand_ratio=max_expand_ratio,
-                                         max_kernel_size = max_kernel_size, 
-                                         se_ratio=se_ratio, 
-                                         strides=strides, 
-                                         weight_decay=weight_decay, 
-                                         use_shortcut=id_skip, 
-                                         drop_connect_rate=block_dropout_rates[num_blocks],
-                                         activation=activation,  
-                                         name='block_%d_%d' % (idx, i)) if blocks_type == 'mix' else\
+                            max_filters_out=max_filters_out,  
+                            max_expand_ratio=max_expand_ratio,
+                            max_kernel_size = max_kernel_size, 
+                            se_ratio=se_ratio, 
+                            strides=strides, 
+                            weight_decay=weight_decay, 
+                            use_shortcut=id_skip, 
+                            drop_connect_rate=block_dropout_rates[num_blocks],
+                            activation=activation,  
+                            name='block_%d_%d' % (idx, i)) if blocks_type == 'mix' else\
                         SuperCSMBConvBlock(max_filters_in=max_filters_in,  
-                                         max_filters_out=max_filters_out,  
-                                         max_expand_ratio=max_expand_ratio,
-                                         kernel_size = kernel_size, 
-                                         se_ratio=se_ratio, 
-                                         strides=strides, 
-                                         weight_decay=weight_decay, 
-                                         use_shortcut=id_skip, 
-                                         drop_connect_rate=block_dropout_rates[num_blocks],
-                                         activation=activation,  
-                                         name='block_%d_%d' % (idx, i))
-                        )
+                            max_filters_out=max_filters_out,  
+                            max_expand_ratio=max_expand_ratio,
+                            kernel_size = kernel_size, 
+                            se_ratio=se_ratio, 
+                            strides=strides, 
+                            weight_decay=weight_decay, 
+                            use_shortcut=id_skip, 
+                            drop_connect_rate=block_dropout_rates[num_blocks],
+                            activation=activation,  
+                            name='block_%d_%d' % (idx, i))
+                            )
                 strides = [1,1]
                 max_filters_in = max_filters_out
                 self.segments_idx[num_blocks] = idx
                 num_blocks += 1
-                
-                
+
+
         print('num_blocks:', num_blocks)
         self.num_blocks = num_blocks
         
@@ -184,7 +199,7 @@ class SinglePathOneShot(Model):
         self.head = tf.keras.Sequential([
                             SuperConv2d(max_filters_in=max_filters_out, 
                                  max_filters_out=1280,
-                                 max_kernel_size=3, 
+                                 max_kernel_size=1, 
                                  strides=1, 
                                  padding='SAME', 
                                  use_bias = False,
@@ -235,7 +250,7 @@ class SinglePathOneShot(Model):
 
         for idx, block in enumerate(self.blocks):
             width_ratio, kernel_size, expand_ratio = search_args[idx]
-            filters_out = ceil(width_ratio*self.blocks_args[self.segments_idx[idx]].channels)
+            filters_out = self.round_width(width_ratio*self.blocks_args[self.segments_idx[idx]].channels)
             filters_out = max(filters_out, 16)
 
             #logging.debug('search args: {}, {}, {}'.format(*search_args[idx]))
