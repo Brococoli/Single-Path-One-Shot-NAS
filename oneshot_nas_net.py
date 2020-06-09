@@ -133,7 +133,7 @@ class SinglePathOneShot(Model):
             kernel_initializer=initializer, 
             kernel_regularizer=tf.keras.regularizers.l2(weight_decay),
             ),
-            layers.BatchNormalization(momentum=0.9, epsilon=1e-5,),
+            SuperBatchNormalization(32, momentum=0.9, epsilon=1e-5,),
             Activation(activation)], name='stem')     
 
         block_dropout_rates = tf.linspace(0.0, drop_connect_rate,
@@ -207,7 +207,7 @@ class SinglePathOneShot(Model):
                                  kernel_regularizer=tf.keras.regularizers.l2(weight_decay),
                                  name='sconv',
                                  ),
-                            layers.BatchNormalization(momentum=0.9, epsilon=1e-5,),
+                            SuperBatchNormalization(1280, momentum=0.9, epsilon=1e-5,),
                             Activation(activation)
                     ], name='head')
         
