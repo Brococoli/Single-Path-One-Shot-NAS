@@ -31,12 +31,15 @@ class Trainer(object):
         tf.keras.backend.set_value(self.optimizer.lr, lr)
 
     def search_plan(self, epoch):
+        return self.model.search_args
+        """
         search_args = deepcopy(self.model.search_args)
         #warm up
         for idx, arg in enumerate(search_args):
             search_args[idx] = arg._replace(width_ratio=arg.width_ratio[:(epoch//3+2)],
                     expand_ratio=arg.expand_ratio[:(epoch//3+2)]) 
         return search_args
+        """
         
     def train_step(self, images, labels, search_args):
         with tf.GradientTape() as g:
@@ -66,13 +69,12 @@ class Trainer(object):
         train_num = self.data['train_num']
         val_ds = self.data['val_ds']
         val_num = self.data['val_num']
-        train_ds = train_ds.shuffle(1000).batch(batch_size).prefetch(500)
-        val_ds = val_ds.batch(batch_size).prefetch(500)
+        train_ds = train_ds.shuffle(1000).batch(batch_size).prefetch(200)
+        val_ds = val_ds.batch(batch_size).prefetch(200)
 
         epochs_probar = tf.keras.utils.Progbar(epochs)   
         for epoch in range(epochs):
             train_probar = tf.keras.utils.Progbar(ceil(train_num/batch_size))    #set value
-            val_probar = tf.keras.utils.Progbar(ceil(val_num/batch_size))     #
 
             self.lr_plan(epoch)
             epochs_probar.update(epoch+1)
@@ -82,6 +84,7 @@ class Trainer(object):
                 loss, acc = self.train_step(images, labels, archs)
                 train_probar.update(idx+1, values=[['accuracy', acc], ['loss', loss]])
 
+            val_probar = tf.keras.utils.Progbar(ceil(val_num/batch_size))     #
             for idx, (images, labels) in enumerate(val_ds):
                 archs = self.get_archs(epoch) 
                 loss, acc = self.val_step(images, labels, archs)
@@ -100,7 +103,7 @@ def train():
 
     logging.info('beging train...')
 
-    model = get_nas_model('mobilenetv2-b0', blocks_type='nomix')
+    model = get_nas_model('mobilenetv2-b0', blocks_type='nomix', load_path='training_data/checkpoing/weights_089-5.3416-0.1967.tf/')
     logging.debug('get a nas model')
 
     data = get_webface()
